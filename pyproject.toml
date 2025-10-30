@@ -13,4 +13,5 @@ dependencies = [
     "pip",
     "pydantic",
     "python-dotenv",
+    "streamlit",
 ]

@@ -2,9 +2,9 @@ from dotenv import load_dotenv
 load_dotenv()
 from langchain_groq import ChatGroq
 from pprint import pprint
-from prompts import *
-from states import *
-from tools import *
+from .prompts import *
+from .states import *
+from .tools import *
 from langgraph.constants import END
 from langgraph.graph import StateGraph
 from langchain.agents import create_agent
@@ -55,7 +55,20 @@ def coder_agent(state: dict) -> dict:
     )
     system_prompt= coder_system_prompt()
     # resp= llm.invoke(system_prompt= system_prompt, user_prompt= user_prompt)
-    coder_tools= [read_file, write_file, list_files, get_current_directory, run_cmd]
+    coder_tools= [
+        read_file,
+        write_file,
+        list_files,
+        get_current_directory,
+        run_cmd,
+        # compatibility tool names expected by some models
+        repo_browser_read_file,
+        repo_browser_write_file,
+        repo_browser_list_files,
+        repo_browser_get_current_directory,
+        repo_browser_run_cmd,
+        repo_browser_print_tree,
+    ]
 
     react_agent= create_agent(llm, coder_tools)
 
