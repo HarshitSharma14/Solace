@@ -1,5 +1,5 @@
 def main():
-    print("Hello from app-builder!")
+    print("Hello from solace!")
 
 
 if __name__ == "__main__":

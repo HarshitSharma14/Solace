@@ -41,24 +41,21 @@ def list_files_recursive(directory: Path) -> list[Path]:
 
 
 def render_file_preview(file_path: Path):
-    suffix = file_path.suffix.lower()
     try:
         content = file_path.read_text(encoding="utf-8")
     except Exception as e:
-        st.warning(f"Could not read {file_path.name}: {e}")
+        st.error(f"Error reading file: {e}")
         return
 
-    if suffix in {".png", ".jpg", ".jpeg", ".gif", ".webp"}:
-        st.image(str(file_path))
-    elif suffix in {".html", ".htm"}:
-        st.caption(str(file_path))
-        components.v1.html(content, height=600, scrolling=True)
-    elif suffix in {".md"}:
-        st.caption(str(file_path))
-        st.markdown(content)
+    ext = file_path.suffix.lower()
+
+    if ext in [".py", ".js", ".ts", ".json", ".css", ".html", ".md"]:
+        # Display as syntax-highlighted code (never render HTML)
+        lang = ext.replace(".", "")
+        st.code(content, language=lang)
     else:
-        st.caption(str(file_path))
-        st.code(content, language=suffix.lstrip("."))
+        # For other file types, show plain text
+        st.text(content)
 
 
 def run_generation(user_prompt: str):
@@ -110,8 +107,8 @@ def ensure_sandbox_server(directory: Path):
     return port
 
 
-st.set_page_config(page_title="AI App Builder", page_icon="🤖", layout="wide")
-st.title("AI App Builder UI")
+st.set_page_config(page_title="Solace", page_icon="🤖", layout="wide")
+st.title("Solace UI")
 st.write("Type a prompt, generate an app, preview files, and download.")
 
 with st.sidebar:
@@ -189,6 +186,7 @@ with right:
             selected = st.selectbox("Select a file", file_options, index=0, key="code_select")
             render_file_preview(PROJECT_DIR / selected)
 
+
         with tab_app:
             index_html = PROJECT_DIR / "index.html"
             if not index_html.exists():
@@ -197,6 +195,13 @@ with right:
                 port = ensure_sandbox_server(PROJECT_DIR)
                 # cache-buster to force reload on rerun
                 nonce = str(int(time.time()))
-                components.v1.iframe(f"http://127.0.0.1:{port}?_={nonce}", height=700)
+                st.markdown(
+                    f"""
+                    <div style="background:white; border-radius:8px; overflow:hidden;">
+                        <iframe src="http://127.0.0.1:{port}?_={nonce}" width="100%" height="700" frameborder="0"></iframe>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
 
 
