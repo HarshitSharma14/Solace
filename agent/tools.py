@@ -3,10 +3,22 @@ import subprocess
 from typing import Tuple, Optional
 from langchain_core.tools import tool
 import os
+import shutil
+import time
+
+DEFAULT_SESSION_ID: Optional[str] = None
+
+
+def set_default_session_id(session_id: Optional[str]) -> None:
+    """Set a module-level default session id used when tools are called without session_id."""
+    global DEFAULT_SESSION_ID
+    DEFAULT_SESSION_ID = session_id
+
 
 def get_project_root(session_id: Optional[str] = None) -> pathlib.Path:
-    if session_id:
-        return pathlib.Path(f"/tmp/solace/sessions/{session_id}")
+    sid = session_id or DEFAULT_SESSION_ID
+    if sid:
+        return pathlib.Path(f"/tmp/solace/sessions/{sid}")
     return pathlib.Path.cwd() / "generated_project"
 
 PROJECT_ROOT = get_project_root()  # DEPRECATED: always use get_project_root in new code
@@ -63,6 +75,39 @@ def init_project_root(session_id: Optional[str] = None):
     root.mkdir(parents=True, exist_ok=True)
     return root
 
+
+def delete_session_root(session_id: str) -> bool:
+    """Delete the entire session root directory tree safely. Returns True on success."""
+    root = get_project_root(session_id)
+    try:
+        if root.exists():
+            shutil.rmtree(root)
+        return True
+    except Exception:
+        return False
+
+
+def cleanup_stale_sessions(max_age_hours: int = 6) -> int:
+    """Remove session directories older than max_age_hours. Returns number of deletions."""
+    base = pathlib.Path("/tmp/solace/sessions")
+    if not base.exists():
+        return 0
+    now = time.time()
+    cutoff = now - max_age_hours * 3600
+    count = 0
+    for entry in base.iterdir():
+        try:
+            if not entry.is_dir():
+                continue
+            mtime = entry.stat().st_mtime
+            if mtime < cutoff:
+                shutil.rmtree(entry)
+                count += 1
+        except Exception:
+            # best-effort cleanup
+            continue
+    return count
+
 # --- Compatibility aliases for models that expect repo_browser.* tools ---
 
 @tool("repo_browser.write_file")
@@ -74,6 +119,12 @@ def repo_browser_write_file(path: str, content: str) -> str:
 @tool("repo_browser.read_file")
 def repo_browser_read_file(path: str) -> str:
     """Compatibility alias that reads a file from the generated project root."""
+    return read_file.run(path)
+
+
+@tool("repo_browser.open_file")
+def repo_browser_open_file(path: str) -> str:
+    """Compatibility alias for models that call open_file instead of read_file."""
     return read_file.run(path)
 
 

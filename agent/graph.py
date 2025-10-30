@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 load_dotenv()
 from langchain_groq import ChatGroq
+from langchain_google_genai import ChatGoogleGenerativeAI
 from pprint import pprint
 from .prompts import *
 from .states import *
@@ -8,28 +9,48 @@ from .tools import *
 from langgraph.constants import END
 from langgraph.graph import StateGraph
 from langchain.agents import create_agent
+import json
+import re
 
 user_prompt= "I want to build a simple calculator web application."
  
-llm= ChatGroq(model= "openai/gpt-oss-120b")
+# llm= ChatGroq(model= "openai/gpt-oss-120b")
+llm= ChatGoogleGenerativeAI(model= "gemini-2.5-flash-lite", temperature= 0)
+def _extract_json(text: str) -> str:
+    # pull first top-level JSON object
+    m = re.search(r"\{[\s\S]*\}", text)
+    return m.group(0) if m else text
+
 
 def planner_agent(state: dict)-> dict:
     user_prompt= state["user_prompt"]
-    resp= llm.with_structured_output(Plan).invoke(planner_prompt(user_prompt))
+    msg = llm.invoke(planner_prompt(user_prompt))
+    raw = getattr(msg, "content", str(msg))
+    data = json.loads(_extract_json(raw))
+    resp = Plan.model_validate(data)
     return { "plan": resp}
 
 def architect_agent(state: dict)-> dict:
     plan= state["plan"]
-    resp= llm.with_structured_output(TaskPlan).invoke(architect_prompt(plan))
-    if resp is None:
-        raise ValueError("Architect agent returned None")
-    
-    resp.plan= plan
-    return { "task_plan": resp}
+    plan_json = plan.model_dump_json()
+    msg = llm.invoke(architect_prompt(plan_json))
+    raw = getattr(msg, "content", str(msg))
+    data = json.loads(_extract_json(raw))
+    tp = TaskPlan.model_validate(data)
+    tp.plan = plan
+    return { "task_plan": tp}
 
 
 def coder_agent(state: dict) -> dict:
     """LangGraph tool-using coder agent."""
+    # Route tool calls to the session-specific temp directory if provided
+    sid = state.get("session_id")
+    if sid:
+        try:
+            set_default_session_id(sid)
+            init_project_root(sid)
+        except Exception:
+            pass
     coder_state= state.get("coder_state")
     if coder_state is None:
         coder_state= CoderState(task_plan= state["task_plan"], current_step_index= 0)
